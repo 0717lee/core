@@ -18,40 +18,21 @@
 #coverage.skip
 #cfg(not(target="js"))
 pub fn BigInt::to_hex(self : BigInt, uppercase? : Bool = true) -> String {
-  if self.is_zero() {
-    return "0"
+  let value = self.to_string(radix=16)
+  if !uppercase {
+    return value
   }
-  // WARN: this implementation assumes that `RADIX_BIT_LEN` is a multiple of 4.
-  let digits_per_limb = RADIX_BIT_LEN / 4
-  let buf = if self.sign is Negative {
-    let builder = StringBuilder(size_hint=self.len * digits_per_limb + 2)
-    builder.write_char('-')
-    builder
-  } else {
-    StringBuilder(size_hint=self.len * digits_per_limb)
-  }
-  for i in self.len>..0 {
-    // split the limb into 4-bit chunks
-    let digits = FixedArray::make(digits_per_limb, '0')
-    let idx = for x = self.limbs[i], idx = 0; x > 0; {
-      let y = x % 16
-      digits[idx] = if y < 10 {
-        (y.reinterpret_as_int() + '0'.to_int()).unsafe_to_char()
-      } else if uppercase {
-        (y.reinterpret_as_int() - 10 + 'A'.to_int()).unsafe_to_char()
+  let result = StringBuilder(size_hint=value.length())
+  for char in value {
+    result.write_char(
+      if char >= 'a' && char <= 'f' {
+        (char.to_int() + ('A' - 'a')).unsafe_to_char()
       } else {
-        (y.reinterpret_as_int() - 10 + 'a'.to_int()).unsafe_to_char()
-      }
-      continue x / 16, idx + 1
-    } nobreak {
-      idx
-    }
-    let idx = if i != self.len - 1 { digits_per_limb } else { idx }
-    for j in 0..<idx {
-      buf.write_char(digits[idx - 1 - j])
-    }
+        char
+      },
+    )
   }
-  buf.to_string()
+  result.to_string()
 }
 
 ///|
@@ -74,50 +55,7 @@ pub extern "js" fn BigInt::to_hex(
 #coverage.skip
 #cfg(not(target="js"))
 pub fn BigInt::from_hex(input : String) -> BigInt {
-  // WARN: this implementation assumes that `RADIX_BIT_LEN` is a multiple of 4.
-  fn char_from_hex(x : Int) -> UInt {
-    (match x {
-      '0'..='9' => x - '0'
-      'A'..='F' => x + (10 - 'A')
-      'a'..='f' => x + (10 - 'a')
-      _ => abort("invalid character")
-    }).reinterpret_as_uint()
-  }
-
-  let len = input.length()
-  if len == 0 {
-    abort("empty string")
-  }
-  let (sign, number_len) = if input.unsafe_get(0) == '-' {
-    (Negative, len - 1)
-  } else {
-    (Positive, len)
-  }
-  let nb_char = RADIX_BIT_LEN / 4 // number of char per limb
-  let quotient = number_len / nb_char
-  let mod = number_len % nb_char
-  let b_len = if mod == 0 { quotient } else { quotient + 1 }
-  let b = FixedArray::make(b_len, 0U)
-  if mod != 0 {
-    let start = len - quotient * nb_char - mod
-    for i in 0..<mod {
-      b[b_len - 1] = (b[b_len - 1] << 4) |
-        char_from_hex(input.unsafe_get(start + i).to_int())
-    }
-  }
-  for i in 0..<quotient {
-    let start = len - (i + 1) * nb_char
-    for j in 0..<nb_char {
-      b[i] = (b[i] << 4) | char_from_hex(input.unsafe_get(start + j).to_int())
-    }
-  }
-  let b_len = for b_len = b_len; b[b_len - 1] == 0 && b_len > 1; {
-    continue b_len - 1
-  } nobreak {
-    b_len
-  }
-  let sign = if b_len == 1 && b[0] == 0 { Positive } else { sign }
-  { limbs: b, sign, len: b_len, }
+  BigInt::from_string(input, radix=16)
 }
 
 ///|

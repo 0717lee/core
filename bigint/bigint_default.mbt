@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The default implementation retains 32-bit limbs. In particular, wasm-gc
+// cannot currently represent wide arithmetic's multi-value results without a
+// performance regression.
+
 ///|
 /// A big integer represented as an array of Int.
 //
