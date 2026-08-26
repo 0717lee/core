@@ -117,7 +117,7 @@ test "context describes the shrunk counterexample" {
       #|  tests=2,
       #|  size=1,
       #|  shrinks=30,
-      #|  shrink_attempts=63,
+      #|  shrink_attempts=33,
       #|)
     ),
   )
@@ -263,8 +263,10 @@ two and ten, and type extrema. This keeps the entire scalar domain reachable
 while regularly exercising overflow, bit-width, and formatting boundaries.
 `Byte` remains uniformly distributed across all 256 bit patterns so `Bytes`
 and other byte-oriented workloads retain broad payload coverage. Fixed-width
-integer shrinkers try zero first, then progressively approach the original
-value, so large failures converge without linearly walking the numeric range.
+integer shrinkers try a midpoint first, then progressively finer candidates
+approaching the original value, with zero as the final fallback. With the
+greedy shrink driver, large failures still converge without linearly walking
+the numeric range while avoiding a likely rejected zero at every level.
 
 ## Custom Types
 
@@ -283,7 +285,7 @@ priv struct Point {
 impl @quickcheck.Arbitrary for Point with fn arbitrary(size, r0) {
   let r1 = r0.split()
   let y = @quickcheck.Arbitrary::arbitrary(size, r1)
-  { x: @quickcheck.Arbitrary::arbitrary(size, r0), y }
+  { x: @quickcheck.Arbitrary::arbitrary(size, r0), y, }
 }
 
 ///|
@@ -320,11 +322,11 @@ test "custom type generation" {
 
 ///|
 test "custom type shrinking" {
-  let point : Point = { x: 2, y: 1 }
+  let point : Point = { x: 2, y: 1, }
   debug_inspect(
     @quickcheck.Shrink::shrink(point).collect(),
     content=(
-      #|[{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 0 }]
+      #|[{ x: 1, y: 1 }, { x: 0, y: 1 }, { x: 2, y: 0 }]
     ),
   )
 }
