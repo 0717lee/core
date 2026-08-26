@@ -57,7 +57,8 @@ struct Hasher {
 /// Parameters:
 ///
 /// * `seed` : An integer value used to initialize the hasher's internal state.
-/// Defaults to 0.
+/// When omitted, a process-wide seed initialized from platform entropy is used
+/// when available. Pass `0` explicitly when deterministic output is required.
 ///
 /// Returns a new `Hasher` instance initialized with the given seed value.
 ///
@@ -81,7 +82,21 @@ pub fn Hasher::Hasher(seed? : Int = seed) -> Hasher {
 }
 
 ///|
-#cfg(not(target="js"))
+#cfg(any(target="native", target="llvm"))
+let seed : Int = match random_seed_native() {
+  Some(seed) => seed
+  None => 0
+}
+
+///|
+#cfg(target="wasm")
+let seed : Int = match random_seed_wasm() {
+  Some(seed) => seed
+  None => 0
+}
+
+///|
+#cfg(target="wasm-gc")
 let seed : Int = 0
 
 ///|
@@ -100,6 +115,44 @@ extern "js" fn random_seed() -> Int =
   #|    return Math.floor(Math.random() * 0x100000000) | 0; // Fallback to Math.random
   #|  }
   #|}
+
+///|
+// `builtin` cannot depend on `env`, so bind the runtime entropy source here.
+#cfg(any(target="native", target="llvm"))
+fn random_seed_native() -> Int? {
+  let bytes : FixedArray[Byte] = FixedArray::make(4, b'\x00')
+  if moonbit_rt_get_random_for_hash_seed(bytes) == 0 {
+    Some(fixedarray_read_uint32_le(bytes, 0).reinterpret_as_int())
+  } else {
+    None
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+#borrow(bytes)
+extern "c" fn moonbit_rt_get_random_for_hash_seed(
+  bytes : FixedArray[Byte],
+) -> Int = "moonbit_rt_get_random"
+
+///|
+// Linear Wasm has WASI as part of its runtime contract.
+#cfg(target="wasm")
+fn random_seed_wasm() -> Int? {
+  let bytes : FixedArray[Byte] = FixedArray::make(4, b'\x00')
+  if wasi_random_get_for_hash_seed(bytes, bytes.length()) == 0 {
+    Some(fixedarray_read_uint32_le(bytes, 0).reinterpret_as_int())
+  } else {
+    None
+  }
+}
+
+///|
+/// WASI treats the fixed array as a linear-memory address.
+#cfg(target="wasm")
+#unsafe_skip_stub_check
+#borrow(bytes)
+fn wasi_random_get_for_hash_seed(bytes : FixedArray[Byte], length : Int) -> Int = "wasi_snapshot_preview1" "random_get"
 
 ///|
 /// Combines a hashable value with the current state of the hasher. This is
